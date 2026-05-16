@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <link rel="manifest" href="manifest.json">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>カテゴリ別フラッシュカード</title>
+    <style>
+        :root {
+            --primary-color: #4A90E2;
+            --bg-color: #f5f7fa;
+            --card-front-bg: #ffffff;
+            --text-color: #333333;
+            --success-color: #28a745;
+        }
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        .header-area {
+            text-align: center;
+            margin-bottom: 15px;
+            width: 100%;
+        }
+        /* カテゴリ選択セレクター */
+        #categorySelect {
+            padding: 8px 15px;
+            border-radius: 20px;
+            border: 2px solid var(--primary-color);
+            background: white;
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--primary-color);
+            outline: none;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+        .counter {
+            font-size: 14px;
+            color: #666;
+        }
+        .card-container {
+            perspective: 1000px;
+            width: 100%;
+            max-width: 360px;
+            height: 240px;
+            cursor: pointer;
+            margin-bottom: 25px;
+        }
+        .card {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.4s;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+            border-radius: 16px;
+        }
+        .card.flipped { transform: rotateY(180deg); }
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 25px;
+            box-sizing: border-box;
+            border-radius: 16px;
+            text-align: center;
+        }
+        .card-front { background-color: var(--card-front-bg); color: var(--text-color); }
+        .card-back { background-color: var(--primary-color); color: white; transform: rotateY(180deg); }
+        
+        .controls { display: flex; gap: 15px; margin-bottom: 40px; }
+        button {
+            padding: 12px 28px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        button:active { transform: scale(0.95); }
+        .btn-next { background-color: #333; color: white; }
+        .btn-manage { background-color: #e0e0e0; color: #333; }
+        .btn-add { background-color: var(--primary-color); color: white; width: 100%; margin-top: 10px; }
+        .btn-csv { background-color: var(--success-color); color: white; width: 100%; margin-top: 10px; }
+        .btn-delete { background-color: #ff4d4d; color: white; padding: 5px 10px; font-size: 12px; border-radius: 4px; }
+
+        .manage-section {
+            display: none;
+            width: 100%;
+            max-width: 360px;
+            background: white;
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            box-sizing: border-box;
+            margin-bottom: 50px;
+        }
+        .manage-section.active { display: block; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-size: 13px; font-weight: bold; margin-bottom: 5px; color: #555; }
+        input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
+        
+        .category-management { border-bottom: 2px solid #f0f0f0; margin-bottom: 20px; padding-bottom: 15px; }
+        .card-list { margin-top: 20px; max-height: 250px; overflow-y: auto; border-top: 1px solid #eee; padding-top: 15px; }
+        .card-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f9f9f9; font-size: 13px; }
+    </style>
+</head>
+<body>
+
+    <div class="header-area">
+        <select id="categorySelect" onchange="changeCategory()"></select>
+        <div class="counter" id="counter">0 / 0</div>
+    </div>
+
+    <div class="card-container" onclick="flipCard()">
+        <div class="card" id="card">
+            <div class="card-face card-front" id="question">読み込み中...</div>
+            <div class="card-face card-back" id="answer">読み込み中...</div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button class="btn-manage" onclick="toggleManageSection()">設定・編集</button>
+        <button class="btn-next" onclick="nextCard()">次へ</button>
+    </div>
+
+    <div class="manage-section" id="manageSection">
+        <div class="category-management">
+            <label>新しいカテゴリを作成</label>
+            <div style="display: flex; gap: 5px;">
+                <input type="text" id="newCatName" placeholder="例：サン・テステフ村">
+                <button onclick="addCategory()" style="padding: 8px 15px; font-size: 12px; background: var(--primary-color); color:white;">追加</button>
+            </div>
+            <button onclick="deleteCurrentCategory()" style="background: none; color: #ff4d4d; font-size: 12px; margin-top: 10px; border: 1px solid #ff4d4d; padding: 5px 10px; border-radius: 5px;">このカテゴリを削除</button>
+        </div>
+
+        <h3>カードの追加</h3>
+        <div class="form-group">
+            <label>表面（問題）</label>
+            <input type="text" id="newQ">
+        </div>
+        <div class="form-group">
+            <label>裏面（答え）</label>
+            <input type="text" id="newA">
+        </div>
+        <button class="btn-add" onclick="addCard()">現在のカテゴリに追加</button>
+
+        <div class="form-group" style="margin-top: 25px; border-top: 1px solid #eee; padding-top: 20px;">
+            <label>CSVから一括登録（現在選択中へ）</label>
+            <input type="file" id="csvFile" accept=".csv">
+            <button class="btn-csv" onclick="importCSV()">CSVを読み込む</button>
+        </div>
+
+        <h3>登録済みのカード一覧</h3>
+        <div class="card-list" id="cardList"></div>
+    </div>
+
+    <script>
+        // データの持ち方を変更： { カテゴリ名: [カード配列], ... }
+        let appData = JSON.parse(localStorage.getItem('flashcardAppData')) || {
+            "デフォルト": [
+                { q: "シャルドネの主要な産地は？", a: "ブルゴーニュ" },
+                { q: "日本のワイン法で認められている品種は？", a: "甲州、マスカット・ベーリーA" }
+            ]
+        };
+        
+        let currentCategory = localStorage.getItem('currentCategory') || "デフォルト";
+        let currentIndex = 0;
+
+        const cardElement = document.getElementById('card');
+        const questionElement = document.getElementById('question');
+        const answerElement = document.getElementById('answer');
+        const counterElement = document.getElementById('counter');
+        const categorySelect = document.getElementById('categorySelect');
+
+        function init() {
+            updateCategoryList();
+            showCard();
+            updateCardList();
+        }
+
+        function updateCategoryList() {
+            categorySelect.innerHTML = '';
+            Object.keys(appData).forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.innerText = cat;
+                if (cat === currentCategory) opt.selected = true;
+                categorySelect.appendChild(opt);
+            });
+        }
+
+        function changeCategory() {
+            currentCategory = categorySelect.value;
+            localStorage.setItem('currentCategory', currentCategory);
+            currentIndex = 0;
+            showCard();
+            updateCardList();
+        }
+
+        function addCategory() {
+            const name = document.getElementById('newCatName').value.trim();
+            if (!name || appData[name]) return alert('新しい名前を入力してください');
+            appData[name] = [];
+            document.getElementById('newCatName').value = '';
+            currentCategory = name;
+            saveAll();
+            updateCategoryList();
+            changeCategory();
+        }
+
+        function deleteCurrentCategory() {
+            const keys = Object.keys(appData);
+            if (keys.length <= 1) return alert('最後のカテゴリは削除できません');
+            if (!confirm(`「${currentCategory}」を削除してもよろしいですか？`)) return;
+            
+            delete appData[currentCategory];
+            currentCategory = Object.keys(appData)[0];
+            saveAll();
+            updateCategoryList();
+            changeCategory();
+        }
+
+        function saveAll() {
+            localStorage.setItem('flashcardAppData', JSON.stringify(appData));
+            localStorage.setItem('currentCategory', currentCategory);
+        }
+
+        function showCard() {
+            cardElement.classList.remove('flipped');
+            const cards = appData[currentCategory];
+            if (!cards || cards.length === 0) {
+                questionElement.innerText = "カードがありません。";
+                answerElement.innerText = "設定から追加してください。";
+            } else {
+                setTimeout(() => {
+                    questionElement.innerText = cards[currentIndex].q;
+                    answerElement.innerText = cards[currentIndex].a;
+                }, 120);
+            }
+            updateCounter();
+        }
+
+        function flipCard() {
+            if (appData[currentCategory].length > 0) cardElement.classList.toggle('flipped');
+        }
+
+        function nextCard() {
+            const cards = appData[currentCategory];
+            if (cards.length <= 1) return;
+            currentIndex = (currentIndex + 1) % cards.length;
+            showCard();
+        }
+
+        function updateCounter() {
+            const count = appData[currentCategory] ? appData[currentCategory].length : 0;
+            counterElement.innerText = count === 0 ? "0 / 0" : `${currentIndex + 1} / ${count}`;
+        }
+
+        function addCard() {
+            const q = document.getElementById('newQ').value;
+            const a = document.getElementById('newA').value;
+            if (!q || !a) return alert('入力してください');
+            appData[currentCategory].push({ q, a });
+            saveAll();
+            document.getElementById('newQ').value = '';
+            document.getElementById('newA').value = '';
+            currentIndex = appData[currentCategory].length - 1;
+            showCard();
+            updateCardList();
+        }
+
+        function deleteCard(index) {
+            if (!confirm('削除しますか？')) return;
+            appData[currentCategory].splice(index, 1);
+            if (currentIndex >= appData[currentCategory].length && currentIndex > 0) currentIndex = appData[currentCategory].length - 1;
+            saveAll();
+            showCard();
+            updateCardList();
+        }
+
+        function updateCardList() {
+            const listElement = document.getElementById('cardList');
+            listElement.innerHTML = '';
+            if(!appData[currentCategory]) return;
+            appData[currentCategory].forEach((card, index) => {
+                const item = document.createElement('div');
+                item.className = 'card-item';
+                item.innerHTML = `<div class="card-item-text"><strong>Q.</strong> ${card.q}</div><button class="btn-delete" onclick="deleteCard(${index})">削除</button>`;
+                listElement.appendChild(item);
+            });
+        }
+
+        function importCSV() {
+            const fileInput = document.getElementById('csvFile');
+            const file = fileInput.files[0];
+            if (!file) return alert("ファイルを選んでください");
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const lines = e.target.result.split(/\r\n|\n/);
+                let count = 0;
+                lines.forEach(line => {
+                    const p = line.split(',');
+                    if (p.length >= 2 && p[0].trim() && p[1].trim()) {
+                        appData[currentCategory].push({ q: p[0].trim(), a: p[1].trim() });
+                        count++;
+                    }
+                });
+                if (count > 0) {
+                    saveAll();
+                    showCard();
+                    updateCardList();
+                    alert(`${count}件追加しました`);
+                    fileInput.value = "";
+                }
+            };
+            reader.readAsText(file, 'UTF-8');
+        }
+
+        function toggleManageSection() {
+            const sec = document.getElementById('manageSection');
+            sec.classList.toggle('active');
+            if(sec.classList.contains('active')) window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        }
+
+        init();
+    </script>
+</body>
+</html>
