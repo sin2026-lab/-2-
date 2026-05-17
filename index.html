@@ -13,6 +13,7 @@
             --text-color: #333333;
             --success-color: #28a745;
             --edit-color: #f39c12;
+            --danger-color: #ff4d4d;
         }
         body {
             font-family: 'Helvetica Neue', Arial, sans-serif;
@@ -58,7 +59,6 @@
         }
         .counter { font-size: 14px; color: #666; margin-bottom: 15px; }
 
-        /* カードのスタイル */
         .card-container {
             perspective: 1000px;
             width: 100%;
@@ -68,7 +68,6 @@
             margin-bottom: 25px;
             position: relative;
         }
-        /* 全画面表示時のスタイル */
         .card-container:fullscreen {
             max-width: none;
             width: 100vw;
@@ -114,7 +113,6 @@
         .card-front { background-color: var(--card-front-bg); color: var(--text-color); }
         .card-back { background-color: var(--primary-color); color: white; transform: rotateY(180deg); }
         
-        /* 全画面専用コントロール */
         .fs-controls {
             display: none;
             position: absolute;
@@ -126,7 +124,6 @@
         .card-container:fullscreen .fs-controls { display: flex; }
         .btn-fs-exit { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.1); border-radius: 50%; width: 40px; height: 40px; border: none; font-size: 20px; }
 
-        /* 通常時コントロール */
         .controls { display: flex; gap: 10px; margin-bottom: 40px; width: 100%; max-width: 360px; justify-content: center; }
         button { padding: 12px 20px; font-size: 15px; font-weight: bold; border: none; border-radius: 50px; cursor: pointer; transition: transform 0.1s; }
         button:active { transform: scale(0.95); }
@@ -147,7 +144,17 @@
         .card-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f9f9f9; font-size: 13px; }
         .item-btns { display: flex; gap: 5px; }
         .btn-small-edit { background-color: var(--edit-color); color: white; padding: 5px 8px; font-size: 11px; border-radius: 4px; }
-        .btn-small-del { background-color: #ff4d4d; color: white; padding: 5px 8px; font-size: 11px; border-radius: 4px; }
+        .btn-small-del { background-color: var(--danger-color); color: white; padding: 5px 8px; font-size: 11px; border-radius: 4px; }
+        
+        .btn-delete-category {
+            background-color: var(--danger-color);
+            color: white;
+            font-size: 12px;
+            padding: 8px 15px;
+            border-radius: 8px;
+            margin-top: 5px;
+            width: 100%;
+        }
     </style>
 </head>
 <body>
@@ -160,12 +167,10 @@
 
     <div class="card-container" id="cardContainer">
         <button class="btn-fs-exit" onclick="exitFullscreen()">✕</button>
-        
         <div class="card" id="card" onclick="flipCard()">
             <div class="card-face card-front" id="question">データがありません</div>
             <div class="card-face card-back" id="answer">データがありません</div>
         </div>
-
         <div class="fs-controls">
             <button class="btn-prev" onclick="prevCard()">前へ</button>
             <button class="btn-next" onclick="nextCard()">次へ</button>
@@ -180,12 +185,14 @@
 
     <div class="manage-section" id="manageSection">
         <div style="border-bottom: 2px solid #f0f0f0; margin-bottom: 20px; padding-bottom: 15px;">
-            <label>カテゴリ作成</label>
+            <label>カテゴリ管理</label>
             <div style="display: flex; gap: 5px;">
-                <input type="text" id="newCatName" placeholder="例：メドック2級">
-                <button onclick="addCategory()" style="padding: 8px 15px; font-size: 12px; background: var(--primary-color); color:white; border-radius: 8px;">追加</button>
+                <input type="text" id="newCatName" placeholder="新しいカテゴリ名">
+                <button onclick="addCategory()" style="padding: 8px 15px; font-size: 12px; background: var(--primary-color); color:white; border-radius: 8px; white-space: nowrap;">作成</button>
             </div>
+            <button id="btnDelCat" class="btn-delete-category" onclick="deleteCurrentCategory()">現在のカテゴリを削除</button>
         </div>
+        
         <h3 id="formTitle">カードの追加</h3>
         <div id="inputArea" class="form-group">
             <label>表面</label>
@@ -196,12 +203,14 @@
             <button id="btnSaveEdit" class="btn-save-edit" onclick="saveEdit()">上書き保存</button>
             <button id="btnCancelEdit" style="display:none; width:100%; background:none; color:#666; font-size:12px; margin-top:5px;" onclick="cancelEdit()">キャンセル</button>
         </div>
+        
         <div style="margin-top: 25px; border-top: 1px solid #eee; padding-top: 20px;">
             <label>CSV読み込み</label>
             <input type="file" id="csvFile" accept=".csv">
             <button class="btn-csv" onclick="importCSV()">読み込む</button>
         </div>
-        <h3>一覧</h3>
+        
+        <h3>カード一覧</h3>
         <div class="card-list" id="cardList"></div>
     </div>
 
@@ -227,19 +236,43 @@
                 if (cat === currentCategory) opt.selected = true;
                 categorySelect.appendChild(opt);
             });
+            // デフォルトカテゴリは削除できないようにする
+            const delBtn = document.getElementById('btnDelCat');
+            if (currentCategory === "デフォルト") {
+                delBtn.style.display = "none";
+            } else {
+                delBtn.style.display = "block";
+                delBtn.innerText = `「${currentCategory}」を削除`;
+            }
         }
 
         function changeCategory() {
             currentCategory = categorySelect.value;
             localStorage.setItem('currentCategory', currentCategory);
-            currentIndex = 0; cancelEdit(); showCard(); updateCardList();
+            currentIndex = 0; cancelEdit(); showCard(); updateCardList(); updateCategoryList();
         }
 
         function addCategory() {
             const name = document.getElementById('newCatName').value.trim();
-            if (!name || appData[name]) return alert('名前を入力してください');
-            appData[name] = []; document.getElementById('newCatName').value = '';
-            currentCategory = name; saveAll(); updateCategoryList(); changeCategory();
+            if (!name) return alert('名前を入力してください');
+            if (appData[name]) return alert('そのカテゴリ名は既に存在します');
+            appData[name] = []; 
+            document.getElementById('newCatName').value = '';
+            currentCategory = name; 
+            saveAll(); 
+            updateCategoryList(); 
+            changeCategory();
+        }
+
+        function deleteCurrentCategory() {
+            if (currentCategory === "デフォルト") return;
+            if (!confirm(`カテゴリ「${currentCategory}」とその中の全てのカードを削除しますか？`)) return;
+            
+            delete appData[currentCategory];
+            currentCategory = "デフォルト";
+            saveAll();
+            updateCategoryList();
+            changeCategory();
         }
 
         function saveAll() {
@@ -275,7 +308,6 @@
             counterElement.innerText = count === 0 ? "0 / 0" : `${currentIndex + 1} / ${count}`;
         }
 
-        // 全画面表示の切り替え
         function toggleFullscreen() {
             const container = document.getElementById('cardContainer');
             if (!document.fullscreenElement) {
@@ -292,6 +324,48 @@
             appData[currentCategory].push({ q, a }); saveAll();
             document.getElementById('newQ').value = ''; document.getElementById('newA').value = '';
             currentIndex = appData[currentCategory].length - 1; showCard(); updateCardList();
+        }
+
+        function parseCSVLine(line) {
+            const result = [];
+            let cur = "";
+            let inQuote = false;
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    inQuote = !inQuote;
+                } else if (char === ',' && !inQuote) {
+                    result.push(cur.trim());
+                    cur = "";
+                } else {
+                    cur += char;
+                }
+            }
+            result.push(cur.trim());
+            return result;
+        }
+
+        function importCSV() {
+            const fileInput = document.getElementById('csvFile'); const file = fileInput.files[0];
+            if (!file) return alert("ファイルを選んでください");
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const lines = e.target.result.split(/\r\n|\n/); let count = 0;
+                lines.forEach(line => {
+                    if (!line.trim()) return;
+                    const p = parseCSVLine(line);
+                    if (p.length >= 2) {
+                        const q = p[0].replace(/^"|"$/g, '');
+                        const a = p[1].replace(/^"|"$/g, '');
+                        if (q && a) {
+                            appData[currentCategory].push({ q, a });
+                            count++;
+                        }
+                    }
+                });
+                if (count > 0) { saveAll(); showCard(); updateCardList(); alert(`${count}件追加しました`); fileInput.value = ""; }
+            };
+            reader.readAsText(file, 'UTF-8');
         }
 
         function startEdit(index) {
@@ -334,21 +408,6 @@
                 item.innerHTML = `<div class="card-item-text"><strong>Q.</strong> ${card.q}</div><div class="item-btns"><button class="btn-small-edit" onclick="startEdit(${index})">修正</button><button class="btn-small-del" onclick="deleteCard(${index})">削除</button></div>`;
                 listElement.appendChild(item);
             });
-        }
-
-        function importCSV() {
-            const fileInput = document.getElementById('csvFile'); const file = fileInput.files[0];
-            if (!file) return alert("ファイルを選んでください");
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const lines = e.target.result.split(/\r\n|\n/); let count = 0;
-                lines.forEach(line => {
-                    const p = line.split(',');
-                    if (p.length >= 2 && p[0].trim() && p[1].trim()) { appData[currentCategory].push({ q: p[0].trim(), a: p[1].trim() }); count++; }
-                });
-                if (count > 0) { saveAll(); showCard(); updateCardList(); alert(`${count}件追加しました`); fileInput.value = ""; }
-            };
-            reader.readAsText(file, 'UTF-8');
         }
 
         function toggleManageSection() {
