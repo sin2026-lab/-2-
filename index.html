@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <link rel="manifest" href="manifest.json">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>共有対応フラッシュカード</title>
+    <title>カテゴリ自動仕分けフラッシュカード</title>
     <style>
         :root {
             --primary-color: #4A90E2;
@@ -187,11 +187,10 @@
     </div>
 
     <script>
-        // サーバー上の共通データファイル名
         const SERVER_CSV_FILE = 'default_data.csv';
 
         let appData = JSON.parse(localStorage.getItem('flashcardAppData')) || {};
-        let currentCategory = localStorage.getItem('currentCategory') || "デフォルト";
+        let currentCategory = localStorage.getItem('currentCategory') || "";
         let currentIndex = 0;
         let editingIndex = -1;
 
@@ -202,11 +201,14 @@
         const categorySelect = document.getElementById('categorySelect');
 
         async function init() {
-            // 初回起動時（データが完全に空の時）にサーバーからデータを取得
             if (Object.keys(appData).length === 0) {
                 await loadServerData();
-            } else {
-                if (!appData[currentCategory]) currentCategory = Object.keys(appData)[0];
+            }
+            if (Object.keys(appData).length === 0) {
+                appData["デフォルト"] = [];
+            }
+            if (!currentCategory || !appData[currentCategory]) {
+                currentCategory = Object.keys(appData)[0];
             }
             updateCategoryList();
             showCard();
@@ -220,26 +222,26 @@
                 const text = await response.text();
                 const lines = text.split(/\r\n|\n/);
                 
-                const serverData = [];
                 lines.forEach(line => {
                     if (!line.trim()) return;
                     const p = parseCSVLine(line);
                     if (p.length >= 2) {
-                        serverData.push({ 
-                            q: p[0].replace(/^"|"$/g, ''), 
-                            a: p[1].replace(/^"|"$/g, '') 
-                        });
+                        const q = p[0].replace(/^"|"$/g, '');
+                        const a = p[1].replace(/^"|"$/g, '');
+                        // 3列目があればそれをカテゴリ名に、無ければ「共通データ」にする
+                        const cat = (p[2] ? p[2].replace(/^"|"$/g, '') : "共通データ").trim();
+                        
+                        if (!appData[cat]) appData[cat] = [];
+                        appData[cat].push({ q, a });
                     }
                 });
                 
-                if (serverData.length > 0) {
-                    appData["共有データ"] = serverData;
-                    currentCategory = "共有データ";
+                if (Object.keys(appData).length > 0) {
+                    currentCategory = Object.keys(appData)[0];
                     saveAll();
                 }
             } catch (err) {
-                console.log("サーバーデータの読み込みをスキップ:", err.message);
-                if (Object.keys(appData).length === 0) appData["デフォルト"] = [];
+                console.log("サーバーデータの読み込みスキップ:", err.message);
             }
         }
 
@@ -353,7 +355,12 @@
                     const lines = evt.target.result.split(/\r\n|\n/);
                     lines.forEach(line => {
                         const p = parseCSVLine(line);
-                        if (p.length >= 2) appData[currentCategory].push({ q: p[0].replace(/^"|"$/g, ''), a: p[1].replace(/^"|"$/g, '') });
+                        if (p.length >= 2) {
+                            const q = p[0].replace(/^"|"$/g, '');
+                            const a = p[1].replace(/^"|"$/g, '');
+                            if (!appData[currentCategory]) appData[currentCategory] = [];
+                            appData[currentCategory].push({ q, a });
+                        }
                     });
                     saveAll(); showCard(); updateCardList(); alert("読み込み完了");
                 };
