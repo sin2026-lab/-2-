@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <link rel="manifest" href="manifest.json">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>カテゴリ自動仕分けフラッシュカード</title>
+    <title>複数ファイル対応フラッシュカード</title>
     <style>
         :root {
             --primary-color: #4A90E2;
@@ -187,7 +187,14 @@
     </div>
 
     <script>
-        const SERVER_CSV_FILE = 'default_data.csv';
+        // ★ここに読み込ませたいCSVファイルの名前を並べます（拡張子 .csv は自動で判別するよう下で処理します）
+        // ※ファイル名がそのままアプリの「カテゴリ名」になります！
+        const SERVER_CSV_FILES = [
+            'グラーブ地区.csv',
+            'ビール.csv',
+            'コーヒー.csv',
+            'ドイツ地図.csv'
+        ];
 
         let appData = JSON.parse(localStorage.getItem('flashcardAppData')) || {};
         let currentCategory = localStorage.getItem('currentCategory') || "";
@@ -202,7 +209,7 @@
 
         async function init() {
             if (Object.keys(appData).length === 0) {
-                await loadServerData();
+                await loadAllServerData();
             }
             if (Object.keys(appData).length === 0) {
                 appData["デフォルト"] = [];
@@ -215,33 +222,38 @@
             updateCardList();
         }
 
-        async function loadServerData() {
-            try {
-                const response = await fetch(SERVER_CSV_FILE);
-                if (!response.ok) throw new Error("File not found");
-                const text = await response.text();
-                const lines = text.split(/\r\n|\n/);
-                
-                lines.forEach(line => {
-                    if (!line.trim()) return;
-                    const p = parseCSVLine(line);
-                    if (p.length >= 2) {
-                        const q = p[0].replace(/^"|"$/g, '');
-                        const a = p[1].replace(/^"|"$/g, '');
-                        // 3列目があればそれをカテゴリ名に、無ければ「共通データ」にする
-                        const cat = (p[2] ? p[2].replace(/^"|"$/g, '') : "共通データ").trim();
-                        
-                        if (!appData[cat]) appData[cat] = [];
-                        appData[cat].push({ q, a });
+        async function loadAllServerData() {
+            for (const fileName of SERVER_CSV_FILES) {
+                try {
+                    const response = await fetch(fileName);
+                    if (!response.ok) throw new Error("File not found");
+                    const text = await response.text();
+                    const lines = text.split(/\r\n|\n/);
+                    
+                    // ファイル名から拡張子を取り除いたものをカテゴリ名にする（例:「ビール.csv」→「ビール」）
+                    const catName = fileName.replace(/\.csv$/i, '');
+                    const fileCards = [];
+
+                    lines.forEach(line => {
+                        if (!line.trim()) return;
+                        const p = parseCSVLine(line);
+                        if (p.length >= 2) {
+                            const q = p[0].replace(/^"|"$/g, '');
+                            const a = p[1].replace(/^"|"$/g, '');
+                            fileCards.push({ q, a });
+                        }
+                    });
+
+                    if (fileCards.length > 0) {
+                        appData[catName] = fileCards;
                     }
-                });
-                
-                if (Object.keys(appData).length > 0) {
-                    currentCategory = Object.keys(appData)[0];
-                    saveAll();
+                } catch (err) {
+                    console.log(`${fileName} の読み込みスキップ:`, err.message);
                 }
-            } catch (err) {
-                console.log("サーバーデータの読み込みスキップ:", err.message);
+            }
+            if (Object.keys(appData).length > 0) {
+                currentCategory = Object.keys(appData)[0];
+                saveAll();
             }
         }
 
@@ -356,8 +368,7 @@
                     lines.forEach(line => {
                         const p = parseCSVLine(line);
                         if (p.length >= 2) {
-                            const q = p[0].replace(/^"|"$/g, '');
-                            const a = p[1].replace(/^"|"$/g, '');
+                            const q = p[0].replace(/^"|"$/g, ''), a = p[1].replace(/^"|"$/g, '');
                             if (!appData[currentCategory]) appData[currentCategory] = [];
                             appData[currentCategory].push({ q, a });
                         }
